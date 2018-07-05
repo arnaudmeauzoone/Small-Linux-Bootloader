@@ -11,6 +11,32 @@
 ;    You should have received a copy of the GNU General Public License
 ;    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+; This is the memory layout right before we pass exectution to the kernel
+
+;         ~                        ~
+;         |  Protected-mode kernel |
+; 100000  +------------------------+
+;         |  I/O memory hole	     |
+; 0A0000	+------------------------+
+;         |  Reserved for BIOS	   |	Leave as much as possible unused
+;         ~                        ~
+;         |  Command line		       |	(Can also be below the X+10000 mark)
+; X+10000	+------------------------+
+;         |  Stack/heap		         |	For use by the kernel real-mode code.
+; X+08000	+------------------------+
+;         |  Kernel setup		       |	The kernel real-mode code.
+;         |  Kernel boot sector	   |	The kernel legacy boot sector.
+; X       +------------------------+
+;         |  Boot loader		       |	<- Boot sector entry point 0000:7C00
+; 001000	+------------------------+
+;         |  Reserved for MBR/BIOS |
+; 000800	+------------------------+
+;         |  Typically used by MBR |
+; 000600	+------------------------+
+;         |  BIOS use only	       |
+; 000000	+------------------------+
+
+
 [BITS 16]
 org	0x7c00
 
@@ -68,29 +94,34 @@ call loader
 
 
 ;kernel_start
-cli
-mov ax, 0x1000
+
+; For more information see: https://www.kernel.org/doc/Documentation/x86/boot.txt
+; Section **** RUNNING THE KERNEL
+cli   ;Clear the interrupt flag
+mov ax, 0x1000 ; Start of real mode 0x10000
 mov ds, ax
 mov es, ax
 mov fs, ax
 mov gs, ax
 mov ss, ax
-mov sp, 0xe000
+mov sp, 0xe000 ; Top of the heap
 jmp 0x1020:0
 
 jmp $
 
 ; ================= functions ====================
 ;length in bytes into edx
-; uses hddread [hdd_pointer] and highmove [highmove_addr] vars
-;clobbers 0x2000 segment
+; Load real mode (compressed kernel code)) from disk at
+; 0x20000 and then move it at 0x100000
+; Why ? because int 0x13 can only go up to 0x100000
+; Why ? ask Intel
 loader:
 .loop:
     cmp edx, 127*512
     jl loader.part_2
     jz loader.finish
 
-    mov ax, 0x7f ;count
+    mov ax, 0x7f ;count (127) because some bios only alow up to 127 sector at once
     xor bx, bx ; offset
     mov cx, 0x2000 ; seg
     push edx
@@ -115,32 +146,30 @@ loader:
 
 highmove_addr dd 0x100000
 ; source = 0x2000
-; count = 127*512  fixed, doesn't if matter we copy junk at end
-; don't think we can use rep movsb here as it wont use EDI/ESI in unreal mode
+; Once we have loaded data from disk to 0x2000
+; We need to move it to 0x100000 (Protected-mode kernel)
 highmove:
-    mov esi, 0x20000
-    mov edi, [highmove_addr]
+    mov esi, 0x20000                 ;From
+    mov edi, [highmove_addr]         ;TO
     mov edx, 512*127
     mov ecx, 0 ; pointer
 .loop:
-    mov eax, [ds:esi]
-    mov [ds:edi], eax
+    mov eax, [esi]      ;From
+    mov [edi], eax      ;To
     add esi, 4
     add edi, 4
     sub edx, 4
     jnz highmove.loop
-    mov [highmove_addr], edi
+    mov [highmove_addr], edi  ; Increase disk pointer
     ret
 
 hddread:
     push eax
-    mov [dap.count], ax
-    mov [dap.offset], bx
-    mov [dap.segment], cx
+    mov [dap.count], ax ; num sectors
+    mov [dap.offset], bx ;dest offset
+    mov [dap.segment], cx ;dest segment
     mov edx, dword [hdd_pointer]
-    mov dword [dap.lba_l], edx
-    ;and eax, 0xffff
-    ;add edx, eax       ; update hdd offset pointer
+    mov dword [dap.lba_l], edx ; lba low bits
     add [hdd_pointer], ax
     mov ah, 0x42
     mov si, dap
@@ -148,20 +177,6 @@ hddread:
     int 0x13
     pop eax
     ret
-
-  ;   push	edx
-	; mov	[dap.count], ax
-	; mov	[dap.offset], bx
-	; mov	[dap.segment], cx
-	; mov	edx, [hdd_pointer]
-	; mov	[dap.lba_l], edx
-	; add	[hdd_pointer], eax		; update current_lba
-	; mov	ah, 0x42
-	; mov	si, dap
-	; mov	dl, 0x80			; first hard disk
-	; int	0x13
-	; pop	edx
-	; ret
 
 dap:
     db 0x10 ; size
@@ -181,7 +196,7 @@ dap:
     cmdLine db "auto",0
     cmdLineLen equ $-cmdLine
     initRdSize dd initRdSizeDef ;From build.sh
-    hdd_pointer dd 1   ;start address for kernel - subsequent calls are sequential
+    hdd_pointer dd 1   
 
 ;boot sector magic
 	times	510-($-$$)	db	0
