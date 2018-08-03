@@ -17,5 +17,5 @@ You should see this:
 To run it just run 
 
 ```shell
-./build-everything.sh
+./build.sh
 ```
