@@ -13,7 +13,7 @@
 
 # Small Linux bootloader
 
-INPUT="bootloader.asm"
+INPUT="./bootloader/bootloader.asm"
 OUTPUT="disk"
 KERN="./vmlinuz"
 RD="./initrd"
