@@ -4,6 +4,12 @@ This is a small linux bootloader with initrd support. It support the X86-64 arch
 
 This is intended for educational only.
 
+You should have these dependances installed on your system
+
+Debian/ubuntu:
+
+`sudo apt-get install bc build-essential libelf-dev libssl-dev bison flex`
+
 This script will compile everything for you:
 
 * The kernel
