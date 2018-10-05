@@ -18,7 +18,7 @@ This script will compile everything for you:
 
 And then it will pack them and lunch it with QEMU.
 You should see this:
-![alt text](https://github.com/arnaudmeauzoone/Small-Linux-Bootloader/blob/master/kernel-boot.png)
+![](https://github.com/arnaudmeauzoone/Small-Linux-Bootloader/blob/master/kernel-boot.png)
 
 To run it just run 
 
